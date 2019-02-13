@@ -32,6 +32,8 @@
 
 #include "libs/neopixel.h"
 #include "esp_log.h"
+#include "mphalport.h"
+#include "neopixel.h"          // BVi
 
 static xSemaphoreHandle neopixel_sem = NULL;
 static intr_handle_t rmt_intr_handle = NULL;
@@ -232,7 +234,9 @@ static void neopixel_handleInterrupt(void *arg)
 //===================================================
 int neopixel_init(int gpioNum, rmt_channel_t channel)
 {
-	esp_err_t res;
+  return ESP_OK;     // BVi No RMT Init !!!
+        
+        esp_err_t res;
 	// Create semaphore if needed
 	if (neopixel_sem == NULL) {
 		neopixel_sem = xSemaphoreCreateBinary();
@@ -322,7 +326,7 @@ void neopixel_deinit(rmt_channel_t channel)
 
 // Start the transfer of Neopixel color bytes from buffer
 //=======================================================
-void np_show(pixel_settings_t *px, rmt_channel_t channel)
+void np_show_XXX_bvi(pixel_settings_t *px, rmt_channel_t channel)
 {
 	// Wait for previous operation to finish
 	xSemaphoreTake(neopixel_sem, portMAX_DELAY);
@@ -374,6 +378,75 @@ void np_show(pixel_settings_t *px, rmt_channel_t channel)
 		xSemaphoreTake(neopixel_sem, portMAX_DELAY);
 	}
 	xSemaphoreGive(neopixel_sem);
+}
+
+// BVi : RMT np_show replacment
+//============================================================================== 
+void IRAM_ATTR esp_neopixel_write_bvi(uint8_t pin, uint8_t *pixels, uint32_t numBytes, uint8_t timing) {
+    uint8_t *p, *end, pix, mask;
+    uint32_t t, time0, time1, period, c, startTime, pinMask;
+
+    //ESP_LOGE("esp_neopixel_write_bvi()","Pin=%d, Pixels: %d, timing=%d", pin, numBytes, timing);
+
+    pinMask   = 1 << pin;
+    p         =  pixels;
+    end       =  p + numBytes;
+    pix       = *p++; // ESP_LOGE("esp_neopixel_write_bvi()","Pix=%u", pix);
+    mask      = 0x80;
+    startTime = 0;
+
+    uint32_t fcpu = ets_get_cpu_frequency() * 1000000;
+
+    if (timing == 1) {
+        // 800 KHz
+        time0 = (fcpu * 0.35) / 1000000; // 0.35us
+        time1 = (fcpu * 0.8) / 1000000; // 0.8us
+        period = (fcpu * 1.25) / 1000000; // 1.25us per bit
+    } else {
+        // 400 KHz
+        time0 = (fcpu * 0.5) / 1000000; // 0.35us
+        time1 = (fcpu * 1.2) / 1000000; // 0.8us
+        period = (fcpu * 2.5) / 1000000; // 1.25us per bit
+    }
+
+    uint32_t irq_state = mp_hal_quiet_timing_enter();
+    for (t = time0;; t = time0) {
+        if (pix & mask) t = time1;                                  // Bit high duration
+        while (((c = mp_hal_ticks_cpu()) - startTime) < period);    // Wait for bit start
+        GPIO_REG_WRITE(GPIO_OUT_W1TS_REG, pinMask);                 // Set high
+        //ESP_LOGE("esp_neopixel_write_bvi()","HIGH");
+        startTime = c;                                              // Save start time
+        while (((c = mp_hal_ticks_cpu()) - startTime) < t);         // Wait high duration
+        GPIO_REG_WRITE(GPIO_OUT_W1TC_REG, pinMask);                 // Set low
+        //ESP_LOGE("esp_neopixel_write_bvi()","low");
+        if (!(mask >>= 1)) {                                        // Next bit/byte
+            if(p >= end) break;
+            pix  = *p++; //ESP_LOGE("esp_neopixel_write_bvi()","Pix=%u", pix);
+            mask = 0x80;
+            
+        }
+    }
+    while ((mp_hal_ticks_cpu() - startTime) < period); // Wait for last bit
+    mp_hal_quiet_timing_exit(irq_state);
+}
+
+// Start the transfer of Neopixel color bytes from buffer
+//=======================================================
+void np_show(pixel_settings_t *px, rmt_channel_t channel)
+{
+        uint8_t pin;
+        uint8_t *pixels;
+        uint32_t numBytes;
+        uint8_t timing;
+        pin = px->pin;
+        pixels = px->pixels;
+        numBytes = px->pixel_count * (px->nbits/8);
+        timing = 1;
+        
+        //ESP_LOGE("np_show()","ENTER");
+        
+        esp_neopixel_write_bvi(pin, pixels, numBytes, timing);
+                
 }
 
 // Clear the Neopixel color buffer

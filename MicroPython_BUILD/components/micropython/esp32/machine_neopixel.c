@@ -155,7 +155,7 @@ STATIC mp_obj_t machine_neopixel_make_new(const mp_obj_type_t *type, size_t n_ar
     // Allocate buffers
     self->px.pixels = (uint8_t *)malloc((self->px.nbits/8) * self->px.pixel_count);
     if (self->px.pixels == NULL) goto error_exit;
-
+    self->px.pin = pin;       // BVi
     if (neopixel_init(pin, rmtchan) != ESP_OK) goto error_exit;
 
     self->base.type = &machine_neopixel_type;

@@ -49,6 +49,7 @@ typedef struct pixel_timing {
 } pixel_timing_t;
 
 typedef struct pixel_settings {
+        uint8_t pin;                // BVi
 	uint8_t *pixels;		// buffer containing pixel values, 3 (RGB) or 4 (RGBW) bytes per pixel
 	pixel_timing_t timings;	// timing data from which the pixels BIT data are formed
 	uint16_t pixel_count;	// number of used pixels
