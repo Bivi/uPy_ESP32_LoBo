@@ -169,6 +169,7 @@ SRC_C =  $(addprefix esp32/,\
 	machine_adc.c \
 	machine_dac.c \
 	machine_pwm.c \
+	machine_pwm_slow.c \
 	machine_uart.c \
 	modmachine.c \
 	modnetwork.c \
